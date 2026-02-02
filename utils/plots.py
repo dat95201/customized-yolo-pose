@@ -71,7 +71,7 @@ def plot_one_box(x, im, color=None, label=None, line_thickness=3, kpt_label=Fals
     tl = line_thickness or round(0.002 * (im.shape[0] + im.shape[1]) / 2) + 1  # line/font thickness
     color = color or [random.randint(0, 255) for _ in range(3)]
     c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
-    cv2.rectangle(im, c1, c2, (255,0,0), thickness=tl*1//3, lineType=cv2.LINE_AA)
+    cv2.rectangle(im, c1, c2, color, thickness=tl*1//3, lineType=cv2.LINE_AA)
     if label:
         if len(label.split(' ')) > 1:
             # label = label.split(' ')[-1]
@@ -99,21 +99,14 @@ def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
                         [255, 51, 51], [153, 255, 153], [102, 255, 102],
                         [51, 255, 51], [0, 255, 0], [0, 0, 255], [255, 0, 0],
                         [255, 255, 255]])
-
-    # skeleton = [[16, 14], [14, 12], [17, 15], [15, 13], [12, 13], [6, 12],
-    #             [7, 13], [6, 7], [6, 8], [7, 9], [8, 10], [9, 11], [2, 3],
-    #             [1, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7]]
-    skeleton = [[1, 2], [2, 3], [3, 4], [4, 5]]
-
-    # pose_limb_color = palette[[9, 9, 9, 9, 7, 7, 7, 0, 0, 0, 0, 0, 16, 16, 16, 16, 16, 16, 16]]
-    # pose_kpt_color = palette[[16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 9, 9, 9, 9, 9, 9]]
-    pose_limb_color = palette[[9, 7, 0, 16]]
-    pose_kpt_color = palette[[5, 8, 16, 17, 18]]
-    radius = 6 # Dat modify 5 to 6 pixel
+    
+    skeleton = [[1, 2], [2, 3], [3, 4], [4, 5], [6, 7], [7, 8], [8, 9], [8, 10]]
+    pose_kpt_color = palette[[5, 8, 16, 17, 18, 6, 9, 15, 16, 17]]
+    radius = 6
     num_kpts = len(kpts) // steps
 
-    for sk_id, sk in enumerate(skeleton):
-        r, g, b = pose_limb_color[sk_id]
+    for sk_id, sk in enumerate(skeleton): # Draw limbs
+        # r, g, b = pose_limb_color[sk_id]
         pos1 = (int(kpts[(sk[0]-1)*steps]), int(kpts[(sk[0]-1)*steps+1]))
         pos2 = (int(kpts[(sk[1]-1)*steps]), int(kpts[(sk[1]-1)*steps+1]))
         if steps == 3:
@@ -125,12 +118,9 @@ def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
             continue
         if pos2[0] % 640 == 0 or pos2[1] % 640 == 0 or pos2[0]<0 or pos2[1]<0:
             continue
-        # cv2.line(im, pos1, pos2, (int(r), int(g), int(b)), thickness=2)
-        # Dat's command:
         cv2.line(im, pos1, pos2, [240, 255, 240], thickness=2)
     
-    # Dat move this block down to here
-    for kid in range(num_kpts):
+    for kid in range(num_kpts): # Draw keypoints
         r, g, b = pose_kpt_color[kid]
         x_coord, y_coord = kpts[steps * kid], kpts[steps * kid + 1]
         if not (x_coord % 640 == 0 or y_coord % 640 == 0):
@@ -228,7 +218,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             image_targets = targets[targets[:, 0] == i]
             boxes = xywh2xyxy(image_targets[:, 2:6]).T
             classes = image_targets[:, 1].astype('int')
-            labels = image_targets.shape[1] == 16 if kpt_label else image_targets.shape[1] == 6   # labels if no conf column
+            labels = image_targets.shape[1] == 26 if kpt_label else image_targets.shape[1] == 6   # labels if no conf column
             conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
             if kpt_label:
                 if conf is None:
@@ -264,9 +254,9 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
                 if labels or conf[j] > 0.1:  # 0.25 conf thresh
                     label = '%s' % cls if labels else '%s %.1f' % (cls, conf[j])
                     if kpt_label:
-                        plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl, kpt_label=kpt_label, kpts=kpts[:,j], steps=steps, orig_shape=orig_shape)
+                        plot_one_box(int(classes[j]), box, mosaic, label=label, color=color, line_thickness=tl, kpt_label=kpt_label, kpts=kpts[:,j], steps=steps, orig_shape=orig_shape)
                     else:
-                        plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl, kpt_label=kpt_label, orig_shape=orig_shape)
+                        plot_one_box(int(classes[j]), box, mosaic, label=label, color=color, line_thickness=tl, kpt_label=kpt_label, orig_shape=orig_shape)
                     #cv2.imwrite(Path(paths[i]).name.split('.')[0] + "_box_{}.".format(j) + Path(paths[i]).name.split('.')[1], mosaic[:,:,::-1]) # used for debugging the dataloader pipeline
 
         # Draw image filename labels

@@ -316,6 +316,12 @@ def train(hyp, opt, device, tb_writer=None):
             # Forward
             with amp.autocast(enabled=cuda):
                 pred = model(imgs)  # forward
+                # print("\nThis is the size of ouput: ")
+                # print(len(pred))
+                # print(len(pred[0]))
+                # print(len(pred[0][0]))
+                # print(len(pred[0][0][0]))
+                # print("This is the size of target: " + str([len(targets), len(targets[0])]))
                 loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
                 if rank != -1:
                     loss *= opt.world_size  # gradient averaged between devices in DDP mode

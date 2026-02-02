@@ -6,11 +6,9 @@ import os
 import copy
 import cv2
 import torch
-import numpy as np
 import torch.backends.cudnn as cudnn
 from numpy import random
 
-from utils.sort import *
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
 from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
@@ -62,16 +60,14 @@ def detect(opt):
     else:
         dataset = LoadImages(source, img_size=imgsz, stride=stride)
 
-    # Initialize timer
+    # Initiate mean time
     mTime = []
 
     # Run inference
     if device.type != 'cpu':
         model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
     t0 = time.time()
-    nOfFr = 0 # frame index
-    mot_tracker = Sort() # object tracking list (SORT)
-
+    nOfFr = 0
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -108,10 +104,6 @@ def detect(opt):
                 scale_coords(img.shape[2:], det[:, :4], im0.shape, kpt_label=False)
                 scale_coords(img.shape[2:], det[:, 6:], im0.shape, kpt_label=kpt_label, step=3)
 
-                # Track objects (SORT)
-                detections = det[:, :5].cpu()
-                track_bbs_ids = mot_tracker.update(detections)
-
                 # Print results
                 for c in det[:, 5].unique():
                     n = (det[:, 5] == c).sum()  # detections per class
@@ -128,16 +120,8 @@ def detect(opt):
                     if save_img or opt.save_crop or view_img:  # Add bbox to image
                         c = int(cls)  # integer class
                         label = None if opt.hide_labels else (names[c] if opt.hide_conf else f'{names[c]} {conf:.2f}')
-
-                        # Find correct ID of detection (SORT)
-                        for j in range(0, len(track_bbs_ids)):
-                            bb_det = np.array(torch.tensor(xyxy, device='cpu')).reshape(1,4)
-                            if iou_batch(bb_det, track_bbs_ids[j][:4]) > 0.3:
-                                obj_id = int(track_bbs_ids[j][4])
-                                label = None if opt.hide_labels else (names[c] if opt.hide_conf else f'{names[c]} {conf:.2f} ID: {obj_id}')
-
                         kpts = det[det_index, 6:]
-                        plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=opt.line_thickness, kpt_label=kpt_label, kpts=kpts, steps=3, orig_shape=im0.shape[:2])
+                        plot_one_box(c, xyxy, im0, label=label, color=colors(c, True), line_thickness=opt.line_thickness, kpt_label=kpt_label, kpts=kpts, steps=3, orig_shape=im0.shape[:2])
                         if opt.save_crop:
                             save_one_box(xyxy, im0s, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
@@ -148,22 +132,18 @@ def detect(opt):
                         line = (conf, cls,  *xyxy) if opt.save_conf else (cls, *xyxy)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
-            else:
-                # Requirement from SORT: must update tracker for each frame even with empty detections (SORT)
-                track_bbs_ids = mot_tracker.update(np.empty((0, 5)))
 
             # Print time (inference + NMS)
             mTime.append(1/(t2 - t1))
             nOfFr = nOfFr + 1
 
-            cv2.rectangle(im0, (0, 0), (200, 80), (0, 0, 0), -1) # Draw panel
+            cv2.rectangle(im0, (0, 0), (240, 84), (0, 0, 0), -1) # Draw panel
 
             fps = f'FPS: {1/(t2 - t1):.2f}' # Frame Per Second
-            cv2.putText(im0, fps, (10, 33), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (100, 255, 0), 2, cv2.LINE_AA)
+            cv2.putText(im0, fps, (10, 33), cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 255, 0), 2, cv2.LINE_AA)
 
             frn = f'Frame: {nOfFr}' # Frame Index
-            cv2.putText(im0, frn, (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (100, 255, 0), 2, cv2.LINE_AA)
-
+            cv2.putText(im0, frn, (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 255, 0), 2, cv2.LINE_AA)
             print(f'{s}Done. ({t2 - t1:.3f}s)')
 
             # Stream results
