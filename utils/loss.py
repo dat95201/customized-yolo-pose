@@ -117,11 +117,8 @@ class ComputeLoss:
         device = targets.device
         lcls, lbox, lobj, lkpt, lkptv = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
         # sigmas = torch.tensor([.26, .25, .25, .35, .35, .79, .79, .72, .72, .62, .62, 1.07, 1.07, .87, .87, .89, .89], device=device) / 10.0
-        # sigmas = torch.tensor([.109, .3708, .23, .24, .073], device=device) / 10.0
-        # sigmas = torch.tensor([.79, .72, .62, .87, .26], device=device) / 10.0
-        # sigmas = torch.tensor([.79, 1.07, .62, .87, .26], device=device) / 10.0
-        # sigmas = torch.tensor([.62, .89, .87, .87, .26], device=device) / 10.0
-        sigmas = torch.tensor([.43, .43, .35, .26, .26], device=device) / 10.0
+        # sigmas = torch.tensor([.32, .35, .22, .15, .12], device=device) / 10.0
+        sigmas = torch.tensor([.32, .35, .22, .15, .12, .32, .32, .22, .15, .15], device=device) / 10.0
         tcls, tbox, tkpt, indices, anchors = self.build_targets(p, targets)  # targets
 
         # Losses
@@ -132,6 +129,8 @@ class ComputeLoss:
             n = b.shape[0]  # number of targets
             if n:
                 ps = pi[b, a, gj, gi]  # prediction subset corresponding to targets
+                pcls = ps[:, 5:7] # x,y,w,h,objness1,objness2,cls,x1,y1,v1,...
+                # print(pcls)
 
                 # Regression
                 pxy = ps[:, :2].sigmoid() * 2. - 0.5
@@ -141,9 +140,9 @@ class ComputeLoss:
                 lbox += (1.0 - iou).mean()  # iou loss
                 if self.kpt_label:
                     #Direct kpt prediction
-                    pkpt_x = ps[:, 6::3] * 2. - 0.5
-                    pkpt_y = ps[:, 7::3] * 2. - 0.5
-                    pkpt_score = ps[:, 8::3]
+                    pkpt_x = ps[:, 7::3] * 2. - 0.5
+                    pkpt_y = ps[:, 8::3] * 2. - 0.5
+                    pkpt_score = ps[:, 9::3]
                     #mask
                     kpt_mask = (tkpt[i][:, 0::2] != 0)
                     lkptv += self.BCEcls(pkpt_score, kpt_mask.float()) 
@@ -160,9 +159,9 @@ class ComputeLoss:
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
-                    t = torch.full_like(ps[:, 5:], self.cn, device=device)  # targets
+                    t = torch.full_like(pcls, self.cn, device=device)  # targets
                     t[range(n), tcls[i]] = self.cp
-                    lcls += self.BCEcls(ps[:, 5:], t)  # BCE
+                    lcls += self.BCEcls(pcls, t)  # BCE
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
@@ -190,7 +189,7 @@ class ComputeLoss:
         na, nt = self.na, targets.shape[0]  # number of anchors, targets
         tcls, tbox, tkpt, indices, anch = [], [], [], [], []
         if self.kpt_label:
-            gain = torch.ones(17, device=targets.device)  # normalized to gridspace gain --> [num = 7 + nkpt * 2]
+            gain = torch.ones(7 + self.nkpt*2, device=targets.device)  # normalized to gridspace gain --> [num = 7 + nkpt * 2]
         else:
             gain = torch.ones(7, device=targets.device)  # normalized to gridspace gain
         ai = torch.arange(na, device=targets.device).float().view(na, 1).repeat(1, nt)  # same as .repeat_interleave(nt)
@@ -205,12 +204,13 @@ class ComputeLoss:
         for i in range(self.nl):
             anchors = self.anchors[i]
             if self.kpt_label:
-                gain[2:16] = torch.tensor(p[i].shape)[7 * [3, 2]]  # xyxy gain
+                # gain[2:16] = torch.tensor(p[i].shape)[7 * [3, 2]]  # xyxy gain (5 keypoints)
+                gain[2:6+self.nkpt*2] = torch.tensor(p[i].shape)[(2 + self.nkpt) * [3, 2]]  # xyxy gain
             else:
                 gain[2:6] = torch.tensor(p[i].shape)[[3, 2, 3, 2]]  # xyxy gain
 
             # Match targets to anchors
-            t = targets * gain
+            t = targets * gain # shape(3,n,7+3*nkpt)
             if nt:
                 # Matches
                 r = t[:, :, 4:6] / anchors[:, None]  # wh ratio

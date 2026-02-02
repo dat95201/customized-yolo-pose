@@ -362,7 +362,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.path = path
         self.kpt_label = kpt_label
         # self.flip_index = [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
-        self.flip_index = [0, 1, 2, 3, 4]
+        self.flip_index = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
         try:
             f = []  # image files
@@ -467,6 +467,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             pbar.close()
 
     def cache_labels(self, path=Path('./labels.cache'), prefix='', kpt_label=False):
+        n_kpts = 10 # --> Dat added
         # Cache dataset labels, check images and read shapes
         x = {}  # dict
         nm, nf, ne, nc = 0, 0, 0, 0  # number missing, found, empty, duplicate
@@ -495,18 +496,18 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         assert (l >= 0).all(), 'negative labels'
                         if kpt_label:
                             # assert l.shape[1] == 56, 'labels require 56 columns each'
-                            assert l.shape[1] == 20, 'labels require 20 columns each' # Dat define =))
+                            assert l.shape[1] == 5 + n_kpts * 3, 'labels require 5 + n_kpts * 2 columns each' # --> Dat modified
                             assert (l[:, 5::3] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
                             assert (l[:, 6::3] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
                             # print("l shape", l.shape)
                             # kpts = np.zeros((l.shape[0], 39))
-                            kpts = np.zeros((l.shape[0], 15)) # Dat define =))
+                            kpts = np.zeros((l.shape[0], 5 + n_kpts * 2)) # --> Dat modified
                             for i in range(len(l)):
                                 kpt = np.delete(l[i,5:], np.arange(2, l.shape[1]-5, 3))  #remove the occlusion paramater from the GT
                                 kpts[i] = np.hstack((l[i, :5], kpt))
                             l = kpts
                             # assert l.shape[1] == 39, 'labels require 39 columns each after removing occlusion paramater'
-                            assert l.shape[1] == 15, 'labels require 15 columns each after removing occlusion paramater' # Dat define =))
+                            assert l.shape[1] == 5 + n_kpts * 2, 'labels require 5 + n_kpts * 2 columns each after removing occlusion paramater' # --> Dat modified
                         else:
                             assert l.shape[1] == 5, 'labels require 5 columns each'
                             assert (l[:, 1:5] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
@@ -515,12 +516,12 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                     else:
                         ne += 1  # label empty
                         # l = np.zeros((0, 39), dtype=np.float32) if kpt_label else np.zeros((0, 5), dtype=np.float32)
-                        l = np.zeros((0, 15), dtype=np.float32) if kpt_label else np.zeros((0, 5), dtype=np.float32) # Dat define =))
+                        l = np.zeros((0, 5 + n_kpts * 2), dtype=np.float32) if kpt_label else np.zeros((0, 5), dtype=np.float32) # Dat define =))
 
                 else:
                     nm += 1  # label missing
                     # l = np.zeros((0, 39), dtype=np.float32) if kpt_label else np.zeros((0, 5), dtype=np.float32)
-                    l = np.zeros((0, 15), dtype=np.float32) if kpt_label else np.zeros((0, 5), dtype=np.float32) # Dat define =))
+                    l = np.zeros((0, 5 + n_kpts * 2), dtype=np.float32) if kpt_label else np.zeros((0, 5), dtype=np.float32) # Dat define =))
 
                 x[im_file] = [l, shape, segments]
             except Exception as e:
@@ -988,19 +989,20 @@ def random_perspective(img, targets=(), segments=(), degrees=10, translate=.1, s
             # clip
             new[:, [0, 2]] = new[:, [0, 2]].clip(0, width)
             new[:, [1, 3]] = new[:, [1, 3]].clip(0, height)
+            n_kpts = 10
             if kpt_label:
-                xy_kpts = np.ones((n * 5, 3))
-                xy_kpts[:, :2] = targets[:,5:].reshape(n*5, 2)  #num_kpt is hardcoded to 17
+                xy_kpts = np.ones((n * n_kpts, 3))
+                xy_kpts[:, :2] = targets[:,5:].reshape(n*n_kpts, 2)  #num_kpt is hardcoded to 17
                 xy_kpts = xy_kpts @ M.T # transform
-                xy_kpts = (xy_kpts[:, :2] / xy_kpts[:, 2:3] if perspective else xy_kpts[:, :2]).reshape(n, 10)  # perspective rescale or affine
+                xy_kpts = (xy_kpts[:, :2] / xy_kpts[:, 2:3] if perspective else xy_kpts[:, :2]).reshape(n, n_kpts*2)  # perspective rescale or affine
                 xy_kpts[targets[:,5:]==0] = 0
-                x_kpts = xy_kpts[:, list(range(0,10,2))]
-                y_kpts = xy_kpts[:, list(range(1,10,2))]
+                x_kpts = xy_kpts[:, list(range(0,n_kpts*2,2))]
+                y_kpts = xy_kpts[:, list(range(1,n_kpts*2,2))]
 
                 x_kpts[np.logical_or.reduce((x_kpts < 0, x_kpts > width, y_kpts < 0, y_kpts > height))] = 0
                 y_kpts[np.logical_or.reduce((x_kpts < 0, x_kpts > width, y_kpts < 0, y_kpts > height))] = 0
-                xy_kpts[:, list(range(0, 10, 2))] = x_kpts
-                xy_kpts[:, list(range(1, 10, 2))] = y_kpts
+                xy_kpts[:, list(range(0, n_kpts*2, 2))] = x_kpts
+                xy_kpts[:, list(range(1, n_kpts*2, 2))] = y_kpts
 
         # filter candidates
         i = box_candidates(box1=targets[:, 1:5].T * s, box2=new.T, area_thr=0.01 if use_segments else 0.10)
