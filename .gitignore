@@ -2,4 +2,19 @@
 *.pth
 *.onnx
 *.weights
-pretrain/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Project generated folders
+models/__pycache__/
+utils/__pycache__/
+runs/
+test/
