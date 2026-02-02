@@ -1,0 +1,10 @@
+train: /content/drive/MyDrive/yolo_pose/data/train_data/
+val: /content/drive/MyDrive/yolo_pose/data/val_data/
+
+# number of classes
+nc: 1
+
+# number of keypoints
+nkpt: 5
+
+names: ['excavator']
