@@ -26,7 +26,7 @@ class Detect(nn.Module):
     stride = None  # strides computed during build
     export = False  # onnx export
 
-    def __init__(self, nc=80, anchors=(), nkpt=None, ch=(), inplace=True, dw_conv_kpt=False):  # detection layer
+    def __init__(self, nc=2, anchors=(), nkpt=10, ch=(), inplace=True, dw_conv_kpt=False):  # detection layer
         super(Detect, self).__init__()
         self.nc = nc  # number of classes
         self.nkpt = nkpt
@@ -68,8 +68,8 @@ class Detect(nn.Module):
 
             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
-            x_det = x[i][..., :6]
-            x_kpt = x[i][..., 6:]
+            x_det = x[i][..., :7]
+            x_kpt = x[i][..., 7:]
 
             if not self.training:  # inference
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
@@ -86,8 +86,8 @@ class Detect(nn.Module):
                     xy = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     wh = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i].view(1, self.na, 1, 1, 2) # wh
                     if self.nkpt != 0:
-                        x_kpt[..., 0::3] = (x_kpt[..., ::3] * 2. - 0.5 + kpt_grid_x.repeat(1,1,1,1,5)) * self.stride[i]  # xy
-                        x_kpt[..., 1::3] = (x_kpt[..., 1::3] * 2. - 0.5 + kpt_grid_y.repeat(1,1,1,1,5)) * self.stride[i]  # xy
+                        x_kpt[..., 0::3] = (x_kpt[..., 0::3] * 2. - 0.5 + kpt_grid_x.repeat(1,1,1,1,self.nkpt)) * self.stride[i]  # xy
+                        x_kpt[..., 1::3] = (x_kpt[..., 1::3] * 2. - 0.5 + kpt_grid_y.repeat(1,1,1,1,self.nkpt)) * self.stride[i]  # xy
                         #x_kpt[..., 0::3] = ((x_kpt[..., 0::3].tanh() * 2.) ** 3 * self.anchor_grid[i][:,0].repeat(self.nkpt,1).permute(1,0).view(1, self.na, 1, 1, self.nkpt)) + kpt_grid_x.repeat(1,1,1,1,17) * self.stride[i]  # xy
                         #x_kpt[..., 1::3] = ((x_kpt[..., 1::3].tanh() * 2.) ** 3 * self.anchor_grid[i][:,0].repeat(self.nkpt,1).permute(1,0).view(1, self.na, 1, 1, self.nkpt)) + kpt_grid_y.repeat(1,1,1,1,17) * self.stride[i]  # xy
                         x_kpt[..., 2::3] = x_kpt[..., 2::3].sigmoid()
@@ -98,7 +98,7 @@ class Detect(nn.Module):
                     xy = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     wh = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                     if self.nkpt != 0:
-                        y[..., 6:] = (y[..., 6:] * 2. - 0.5 + self.grid[i].repeat((1,1,1,1,self.nkpt))) * self.stride[i]  # xy
+                        y[..., 7:] = (y[..., 7:] * 2. - 0.5 + self.grid[i].repeat((1,1,1,1,self.nkpt))) * self.stride[i]  # xy
                     y = torch.cat((xy, wh, y[..., 4:]), -1)
 
                 z.append(y.view(bs, -1, self.no))
@@ -115,7 +115,7 @@ class IDetect(nn.Module):
     stride = None  # strides computed during build
     export = False  # onnx export
 
-    def __init__(self, nc=80, anchors=(), nkpt=None, ch=(), inplace=True, dw_conv_kpt=False):  # detection layer
+    def __init__(self, nc=2, anchors=(), nkpt=10, ch=(), inplace=True, dw_conv_kpt=False):  # detection layer
         super(IDetect, self).__init__()
         self.nc = nc  # number of classes
         self.nkpt = nkpt
@@ -179,8 +179,8 @@ class IDetect(nn.Module):
                     xy = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     wh = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i].view(1, self.na, 1, 1, 2) # wh
                     if self.nkpt != 0:
-                        x_kpt[..., 0::3] = (x_kpt[..., ::3] * 2. - 0.5 + kpt_grid_x.repeat(1,1,1,1,5)) * self.stride[i]  # xy
-                        x_kpt[..., 1::3] = (x_kpt[..., 1::3] * 2. - 0.5 + kpt_grid_y.repeat(1,1,1,1,5)) * self.stride[i]  # xy
+                        x_kpt[..., 0::3] = (x_kpt[..., 0::3] * 2. - 0.5 + kpt_grid_x.repeat(1,1,1,1,self.nkpt)) * self.stride[i]  # xy
+                        x_kpt[..., 1::3] = (x_kpt[..., 1::3] * 2. - 0.5 + kpt_grid_y.repeat(1,1,1,1,self.nkpt)) * self.stride[i]  # xy
                         #x_kpt[..., 0::3] = (x_kpt[..., ::3] + kpt_grid_x.repeat(1,1,1,1,17)) * self.stride[i]  # xy
                         #x_kpt[..., 1::3] = (x_kpt[..., 1::3] + kpt_grid_y.repeat(1,1,1,1,17)) * self.stride[i]  # xy
                         #print('=============')
@@ -216,12 +216,12 @@ class IKeypoint(nn.Module):
     stride = None  # strides computed during build
     export = False  # onnx export
 
-    def __init__(self, nc=80, anchors=(), nkpt=17, ch=(), inplace=True, dw_conv_kpt=False):  # detection layer
+    def __init__(self, nc=2, anchors=(), nkpt=10, ch=(), inplace=True, dw_conv_kpt=False):  # detection layer
         super(IKeypoint, self).__init__()
         self.nc = nc  # number of classes
         self.nkpt = nkpt
         self.dw_conv_kpt = dw_conv_kpt
-        self.no_det=(nc + 5)  # number of outputs per anchor for box and class
+        self.no_det = 7  # number of outputs per anchor for box and class (nc + 5)
         self.no_kpt = 3*self.nkpt ## number of outputs per anchor for keypoints
         self.no = self.no_det+self.no_kpt
         self.nl = len(anchors)  # number of detection layers
@@ -262,8 +262,8 @@ class IKeypoint(nn.Module):
 
             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
-            x_det = x[i][..., :6]
-            x_kpt = x[i][..., 6:]
+            x_det = x[i][..., :7]
+            x_kpt = x[i][..., 7:]
 
             if not self.training:  # inference
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
@@ -280,18 +280,8 @@ class IKeypoint(nn.Module):
                     xy = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     wh = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i].view(1, self.na, 1, 1, 2) # wh
                     if self.nkpt != 0:
-                        x_kpt[..., 0::3] = (x_kpt[..., ::3] * 2. - 0.5 + kpt_grid_x.repeat(1,1,1,1,5)) * self.stride[i]  # xy
-                        x_kpt[..., 1::3] = (x_kpt[..., 1::3] * 2. - 0.5 + kpt_grid_y.repeat(1,1,1,1,5)) * self.stride[i]  # xy
-                        #x_kpt[..., 0::3] = (x_kpt[..., ::3] + kpt_grid_x.repeat(1,1,1,1,17)) * self.stride[i]  # xy
-                        #x_kpt[..., 1::3] = (x_kpt[..., 1::3] + kpt_grid_y.repeat(1,1,1,1,17)) * self.stride[i]  # xy
-                        #print('=============')
-                        #print(self.anchor_grid[i].shape)
-                        #print(self.anchor_grid[i][...,0].unsqueeze(4).shape)
-                        #print(x_kpt[..., 0::3].shape)
-                        #x_kpt[..., 0::3] = ((x_kpt[..., 0::3].tanh() * 2.) ** 3 * self.anchor_grid[i][...,0].unsqueeze(4).repeat(1,1,1,1,self.nkpt)) + kpt_grid_x.repeat(1,1,1,1,17) * self.stride[i]  # xy
-                        #x_kpt[..., 1::3] = ((x_kpt[..., 1::3].tanh() * 2.) ** 3 * self.anchor_grid[i][...,1].unsqueeze(4).repeat(1,1,1,1,self.nkpt)) + kpt_grid_y.repeat(1,1,1,1,17) * self.stride[i]  # xy
-                        #x_kpt[..., 0::3] = (((x_kpt[..., 0::3].sigmoid() * 4.) ** 2 - 8.) * self.anchor_grid[i][...,0].unsqueeze(4).repeat(1,1,1,1,self.nkpt)) + kpt_grid_x.repeat(1,1,1,1,17) * self.stride[i]  # xy
-                        #x_kpt[..., 1::3] = (((x_kpt[..., 1::3].sigmoid() * 4.) ** 2 - 8.) * self.anchor_grid[i][...,1].unsqueeze(4).repeat(1,1,1,1,self.nkpt)) + kpt_grid_y.repeat(1,1,1,1,17) * self.stride[i]  # xy
+                        x_kpt[..., 0::3] = (x_kpt[..., 0::3] * 2. - 0.5 + kpt_grid_x.repeat(1,1,1,1,self.nkpt)) * self.stride[i]  # xy
+                        x_kpt[..., 1::3] = (x_kpt[..., 1::3] * 2. - 0.5 + kpt_grid_y.repeat(1,1,1,1,self.nkpt)) * self.stride[i]  # xy
                         x_kpt[..., 2::3] = x_kpt[..., 2::3].sigmoid()
 
                     y = torch.cat((xy, wh, y[..., 4:], x_kpt), dim = -1)
@@ -300,7 +290,7 @@ class IKeypoint(nn.Module):
                     xy = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     wh = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                     if self.nkpt != 0:
-                        y[..., 6:] = (y[..., 6:] * 2. - 0.5 + self.grid[i].repeat((1,1,1,1,self.nkpt))) * self.stride[i]  # xy
+                        y[..., 7:] = (y[..., 7:] * 2. - 0.5 + self.grid[i].repeat((1,1,1,1,self.nkpt))) * self.stride[i]  # xy
                     y = torch.cat((xy, wh, y[..., 4:]), -1)
 
                 z.append(y.view(bs, -1, self.no))
@@ -315,6 +305,7 @@ class IKeypoint(nn.Module):
 
 class Model(nn.Module):
     def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None, anchors=None):  # model, input channels, number of classes
+        nc = 2
         super(Model, self).__init__()
         if isinstance(cfg, dict):
             self.yaml = cfg  # model dict

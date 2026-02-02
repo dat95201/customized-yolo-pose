@@ -483,14 +483,15 @@ def wh_iou(wh1, wh2):
 
 
 def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, multi_label=False,
-                        labels=(), kpt_label=False, nc=None, nkpt=None):
+                        labels=(), kpt_label=False, nc=2, nkpt=10):
     """Runs Non-Maximum Suppression (NMS) on inference results
 
     Returns:
          list of detections, on (n,6) tensor per image [xyxy, conf, cls]
     """
+    # shape of prediction: [32, 25500, 37]
     if nc is None:
-        nc = prediction.shape[2] - 5  if not kpt_label else prediction.shape[2] - 56 # number of classes
+        nc = prediction.shape[2] - 5  if not kpt_label else prediction.shape[2] - (5 + nkpt*3) # number of classes
     xc = prediction[..., 4] > conf_thres  # candidates
 
     # Settings
@@ -523,28 +524,33 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
             continue
 
         # Compute conf
-        x[:, 5:5+nc] *= x[:, 4:5]  # conf = obj_conf * cls_conf
+        x[:, 5:5+nc] *= x[:, 4:5]  # conf = obj_conf * cls_conf --> x[5] is class i confidence
 
         # Box (center x, center y, width, height) to (x1, y1, x2, y2)
         box = xywh2xyxy(x[:, :4])
 
         # Detections matrix nx6 (xyxy, conf, cls)
         if multi_label:
-            i, j = (x[:, 5:] > conf_thres).nonzero(as_tuple=False).T
-            x = torch.cat((box[i], x[i, j + 5, None], j[:, None].float()), 1)
+            if not kpt_label:
+                i, j = (x[:, 5:] > conf_thres).nonzero(as_tuple=False).T
+                x = torch.cat((box[i], x[i, j + 5, None], j[:, None].float()), 1)
+            else:
+                kpts = x[:, 5+nc:]
+                conf, j = x[:, 5:5+nc].max(1, keepdim=True)
+                x = torch.cat((box, conf, j.float(), kpts), 1)[conf.view(-1) > conf_thres]
         else:  # best class only
             if not kpt_label:
                 conf, j = x[:, 5:].max(1, keepdim=True)
                 x = torch.cat((box, conf, j.float()), 1)[conf.view(-1) > conf_thres]
             else:
-                kpts = x[:, 6:]
-                conf, j = x[:, 5:6].max(1, keepdim=True)
+                kpts = x[:, 5+nc:]
+                conf, j = x[:, 5:5+nc].max(1, keepdim=True)
                 x = torch.cat((box, conf, j.float(), kpts), 1)[conf.view(-1) > conf_thres]
 
 
         # Filter by class
         if classes is not None:
-            x = x[(x[:, 5:6] == torch.tensor(classes, device=x.device)).any(1)]
+            x = x[(x[:, 5:5+nc] == torch.tensor(classes, device=x.device)).any(1)]
 
         # Apply finite constraint
         # if not torch.isfinite(x).all():
@@ -559,6 +565,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
 
         # Batched NMS
         c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
+
         boxes, scores = x[:, :4] + c, x[:, 4]  # boxes (offset by class), scores
         i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
         if i.shape[0] > max_det:  # limit detections
